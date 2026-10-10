@@ -1,0 +1,374 @@
+---
+interface Props {
+  kind: "terminal" | "intercept" | "report";
+}
+
+const { kind } = Astro.props;
+
+const ports = [
+  { port: "22/tcp", state: "open", service: "ssh", version: "OpenSSH 8.9" },
+  { port: "80/tcp", state: "open", service: "http", version: "nginx 1.24" },
+  { port: "443/tcp", state: "open", service: "https", version: "nginx 1.24" },
+  { port: "3306/tcp", state: "filtered", service: "mysql", version: "" },
+];
+
+const severities = [
+  { label: "Critical", count: 2, hue: 0 },
+  { label: "High", count: 5, hue: 24 },
+  { label: "Medium", count: 8, hue: 45 },
+  { label: "Low", count: 4, hue: 180 },
+];
+
+const findings = [
+  { name: "SQL Injection", where: "/api/login", hue: 0 },
+  { name: "Stored XSS", where: "/comments", hue: 24 },
+  { name: "IDOR", where: "/orders/{id}", hue: 24, active: true },
+  { name: "Misconfiguration", where: "nginx", hue: 45 },
+];
+---
+
+<div class:list={["pv", `pv--${kind}`]} aria-hidden="true">
+  {kind === "terminal" && (
+    <div class="term">
+      <p><b>$</b> nmap -sV 10.10.14.7</p>
+      <p class="term__head"><span>PORT</span><span>STATE</span><span>SERVICE</span><span>VERSION</span></p>
+      {ports.map((p) => (
+        <p class="term__row">
+          <span>{p.port}</span>
+          <span class:list={["state", p.state === "open" ? "state--open" : "state--filtered"]}>{p.state}</span>
+          <span>{p.service}</span>
+          <span class="dim">{p.version}</span>
+        </p>
+      ))}
+      <p class="dim">Nmap done: 1 IP address (1 host up)</p>
+      <p><b>$</b> curl -I http://10.10.14.7</p>
+      <p><span class="ok">HTTP/1.1 200 OK</span> <span class="dim">· Server: nginx</span></p>
+      <p><b>$</b> <span class="cursor"></span></p>
+    </div>
+  )}
+
+  {kind === "intercept" && (
+    <div class="burp">
+      <div class="burp__bar">
+        <span class="burp__tab is-active">Request</span>
+        <span class="burp__tab">Response</span>
+        <span class="burp__btn">Forward</span>
+      </div>
+      <div class="burp__req">
+        <p><b class="method">POST</b> /api/login <span class="dim">HTTP/1.1</span></p>
+        <p><span class="key">Host:</span> shop.lab</p>
+        <p><span class="key">Content-Type:</span> application/json</p>
+        <p><span class="key">Cookie:</span> session=8f3a…c21</p>
+        <p class="gap">{"{"}"user":"<mark>admin' OR 1=1--</mark>",</p>
+        <p>&nbsp;"pass":"x"{"}"}</p>
+      </div>
+      <span class="finding">
+        <svg viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" /><path d="M12 9v4" /><path d="M12 17h.01" /></svg>
+        SQL Injection · Critical
+      </span>
+    </div>
+  )}
+
+  {kind === "report" && (
+    <div class="report">
+      <div class="report__bar">
+        <strong>Pentest hisoboti</strong>
+        <span class="report__tag">19 topilma</span>
+      </div>
+      <div class="sev">
+        {severities.map((s) => (
+          <span class="sev__box" style={`--h:${s.hue}`}>
+            <b>{s.count}</b>
+            {s.label}
+          </span>
+        ))}
+      </div>
+      <div class="list">
+        {findings.map((f) => (
+          <div class:list={["list__row", f.active && "is-active"]} style={`--h:${f.hue}`}>
+            <i></i>
+            <span class="list__name">{f.name}</span>
+            <span class="list__where">{f.where}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )}
+</div>
+
+<style>
+  .pv {
+    position: relative;
+    height: 100%;
+    font-family: var(--font-sans);
+    color: #e3ecef;
+  }
+
+  svg {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  p {
+    margin: 0;
+  }
+
+  .dim {
+    color: #7f979f;
+  }
+
+  /* ---------- Terminal ---------- */
+
+  .term {
+    display: grid;
+    align-content: start;
+    gap: 3px;
+    height: 100%;
+    padding: 4px 14px 12px;
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    line-height: 1.35;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+
+  .term b {
+    color: #a3e635;
+  }
+
+  .term__head,
+  .term__row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 0.9fr 1.3fr;
+    gap: 6px;
+  }
+
+  .term__head {
+    color: #9fb4bc;
+  }
+
+  .state--open {
+    color: #8ccbd8;
+  }
+
+  .state--filtered {
+    color: #fbbf24;
+  }
+
+  .ok {
+    color: #a3e635;
+  }
+
+  .cursor {
+    display: inline-block;
+    width: 6px;
+    height: 11px;
+    vertical-align: -2px;
+    background: #8ccbd8;
+    animation: blink 1.1s steps(1) infinite;
+  }
+
+  @keyframes blink {
+    50% {
+      opacity: 0;
+    }
+  }
+
+  /* ---------- Intercept ---------- */
+
+  .burp {
+    position: relative;
+    display: grid;
+    grid-template-rows: auto 1fr;
+    gap: 8px;
+    height: 100%;
+    padding: 4px 12px 12px;
+    font-size: 10px;
+  }
+
+  .burp__bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .burp__tab {
+    padding: 3px 8px;
+    border-radius: 6px;
+    color: #a9bcc3;
+  }
+
+  .burp__tab.is-active {
+    color: #e8f3f6;
+    background: rgb(255 255 255 / 0.08);
+    box-shadow: 0 0 0 1px rgb(255 255 255 / 0.08) inset;
+  }
+
+  .burp__btn {
+    margin-left: auto;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-weight: 700;
+    color: #0b1418;
+    background: #8ccbd8;
+  }
+
+  .burp__req {
+    display: grid;
+    align-content: start;
+    gap: 3px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    line-height: 1.4;
+    white-space: nowrap;
+    overflow: hidden;
+    background: rgb(255 255 255 / 0.03);
+    box-shadow: 0 0 0 1px rgb(255 255 255 / 0.07) inset;
+  }
+
+  .method {
+    padding: 0 4px;
+    border-radius: 3px;
+    color: #0b1418;
+    background: #fbbf24;
+  }
+
+  .key {
+    color: #8ccbd8;
+  }
+
+  .gap {
+    margin-top: 4px;
+  }
+
+  mark {
+    padding: 0 2px;
+    border-radius: 3px;
+    color: #fecaca;
+    background: rgb(248 113 113 / 0.22);
+    box-shadow: 0 0 0 1px rgb(248 113 113 / 0.5) inset;
+  }
+
+  .finding {
+    position: absolute;
+    right: 14px;
+    bottom: 16px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 9px;
+    border-radius: 6px;
+    font-size: 9px;
+    font-weight: 700;
+    color: #0b1418;
+    background: #f87171;
+    box-shadow: 0 6px 16px -4px rgb(0 0 0 / 0.6);
+  }
+
+  .finding svg {
+    width: 11px;
+    height: 11px;
+  }
+
+  /* ---------- Report ---------- */
+
+  .report {
+    display: grid;
+    align-content: start;
+    gap: 6px;
+    height: 100%;
+    padding: 0 12px 10px;
+    font-size: 10px;
+  }
+
+  .report__bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .report__bar strong {
+    font-size: 12px;
+    letter-spacing: -0.01em;
+  }
+
+  .report__tag {
+    padding: 1px 6px;
+    border-radius: 99px;
+    font-size: 9px;
+    color: #c9e6ec;
+    background: rgb(140 203 216 / 0.18);
+  }
+
+  .sev {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+  }
+
+  .sev__box {
+    display: grid;
+    gap: 0;
+    padding: 3px 7px;
+    border-radius: 7px;
+    font-size: 8.5px;
+    color: #a9bcc3;
+    background: hsl(var(--h) 80% 60% / 0.08);
+    box-shadow: 0 0 0 1px hsl(var(--h) 80% 60% / 0.28) inset;
+  }
+
+  .sev__box b {
+    font-size: 14px;
+    line-height: 1.1;
+    color: hsl(var(--h) 85% 72%);
+  }
+
+  .list {
+    display: grid;
+    border-radius: 8px;
+    overflow: hidden;
+    background: rgb(255 255 255 / 0.03);
+    box-shadow: 0 0 0 1px rgb(255 255 255 / 0.07) inset;
+  }
+
+  .list__row {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 7px;
+    padding: 3px 8px;
+    line-height: 1.3;
+  }
+
+  .list__row + .list__row {
+    border-top: 1px solid rgb(255 255 255 / 0.05);
+  }
+
+  .list__row.is-active {
+    background: rgb(140 203 216 / 0.1);
+    box-shadow: 2px 0 0 #8ccbd8 inset;
+  }
+
+  .list__row i {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: hsl(var(--h) 85% 65%);
+    box-shadow: 0 0 8px hsl(var(--h) 85% 60% / 0.7);
+  }
+
+  .list__name {
+    font-weight: 600;
+  }
+
+  .list__where {
+    font-family: var(--font-mono);
+    font-size: 8.5px;
+    color: #9fb4bc;
+  }
+</style>
